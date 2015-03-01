@@ -29,7 +29,7 @@
 </ul>
 <strong><em>（上記の線は唯一【縦線】を除きます。）</em></strong>
 
-<h1>加算法</h1>
+<h1>加法</h1>
 
 この性質を活かして、擬似的な足し算を定義することができます。
 - 点Ａと点Ｂを足し合わせて出来る点はその2つの点をつなぐ直線が通過する3つ目の点の反転
@@ -66,7 +66,7 @@
 A + B = B + A</em></strong>
 上記の二つの常識が楕円曲線の擬似的な足し算でも通じます。
 
-<h3>加算法　－　ソース</h3>
+<h3>加法　－　ソース</h3>
 
 これをパイソンで書くと下記のようになります。
 
@@ -76,12 +76,12 @@ cA = 0
 cP = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 1
 
 def inv_mod(a, p = cP):
-    lim, him = 1,0
+    lim, him = 1, 0
     low, high = a % p, p
     while low > 1:
-        ratio = high/low
-        nm = him-lim*ratio
-        new = high-low*ratio
+        ratio = high / low
+        nm = him - lim * ratio
+        new = high - low * ratio
         him = lim
         high = low
         lim = nm
@@ -198,12 +198,12 @@ Gy = 326705100207588169780830851305070431844712733806592432759389043357573374824
 Gpt = (Gx, Gy)
 
 def inv_mod(a, p = cP):
-    lim, him = 1,0
+    lim, him = 1, 0
     low, high = a % p, p
     while low > 1:
-        ratio = high/low
-        nm = him-lim*ratio
-        new = high-low*ratio
+        ratio = high / low
+        nm = him - lim * ratio
+        new = high - low * ratio
         him = lim
         high = low
         lim = nm

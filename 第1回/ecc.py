@@ -9,12 +9,12 @@ Gy = 326705100207588169780830851305070431844712733806592432759389043357573374824
 Gpt = (Gx, Gy)
 
 def inv_mod(a, p = cP):
-    lim, him = 1,0
+    lim, him = 1, 0
     low, high = a % p, p
     while low > 1:
-        ratio = high/low
-        nm = him-lim*ratio
-        new = high-low*ratio
+        ratio = high / low
+        nm = him - lim * ratio
+        new = high - low * ratio
         him = lim
         high = low
         lim = nm
