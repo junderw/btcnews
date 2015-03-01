@@ -1,62 +1,76 @@
-�^�C�g���F�Z�p�Ҍ����r�b�g�R�C���u�� ��1�� �ȉ~�Ȑ��������̎�ň���
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/series_banner.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/series_banner.png" alt="series_banner" width="1000" height="434" class="aligncenter size-full wp-image-2572" /></a>
+<h1>はじめに</h1>
+どうも初めまして、ビットバンク社にて技術顧問を勤めさせていただいておりますジョナサン・アンダーウッドと申します。宜しくお願いします。
+日本語ネイティブじゃないので、理解可能な文章作り頑張ります。
 
-�{���F
-�ǂ������߂܂��āA�r�b�g�o���N�ЂɂċZ�p�ږ���΂߂����Ă��������Ă���܂��W���i�T���E�A���_�[�E�b�h�Ɛ\���܂��B�X�������肢���܂��B
+今日のお話しはビットコインの背骨とも言える暗号アルゴリズム、Elliptic Curve Cryptography (ECC) について説明をすると同時に、
+実際に楕円曲線の計算ができるパイソンのスクリプトを一緒に書いていきます。
+(次回からは、その背骨に色々と積み上げて行って、手作り (ビットコインのライブラリ無し) でビットコインのウォレットが作れるくらいまでやります。)
 
-���{��l�C�e�B�u����Ȃ��̂ŁA�����\�ȕ��͍��撣��܂��B
+<font color="red"><strong>(注意：暗号アルゴリズムの計算はテストがしにくく、動いているように見えても、稀なケースにしか現れないバグは山ほどあります。
+よって、本気のビジネスや本物のビットコインを扱うソフトの開発に関わった場合、当講座で作る暗号アルゴリズムに関わるコードを使わず、
+世界中のシステムに試され、叩き固められたライブラリを使うことをオススメします。このコードを使用したことから発生した如何なる責任は負いかねます。
+予めご了承下さい。)</strong></font>
 
-�����̂��b���̓r�b�g�R�C���̔w���Ƃ�������Í��A���S���Y���AElliptic Curve Cryptography (ECC) �ɂ��Đ���������Ɠ����ɁA
-���ۂɑȉ~�Ȑ��̌v�Z���ł���p�C�\���̃X�N���v�g���ꏏ�ɏ����Ă����܂��B
+<h1>楕円曲線とはどういう仕組み？</h1>
 
-(���񂩂�́A���̔w���ɐF�X�Ɛςݏグ�čs���āA���� (�r�b�g�R�C���̃��C�u��������) �Ńr�b�g�R�C���̃E�H���b�g�����邭�炢�܂ł��܂�)
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/loop_EC.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/loop_EC-300x297.png" alt="loop_EC" width="300" height="297" class="alignnone size-medium wp-image-2532" /></a> <a href="https://btcnews.jp/wp-content/uploads/2015/03/secp256k1_EC.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/secp256k1_EC-300x297.png" alt="secp256k1_EC" width="300" height="297" class="alignnone size-medium wp-image-2533" /></a>
 
+楕円曲線とは、上記のイメージのような (必ずしも楕円である必要が無い) グラフです。
 
+必ず下記のようなフォーマットに従います。
 
-(���ӁF�Í��A���S���Y���̌v�Z�̓e�X�g�����ɂ����A�����Ă���悤�Ɍ����Ă��A�H�ȃP�[�X�ɂ�������Ȃ��o�O�͎R�قǂ���܂��B
-����āA�{�C�̃r�W�l�X��{���̃r�b�g�R�C���������\�t�g�̊J���Ɋւ�����ꍇ�A���u���ō��Í��A���S���Y���Ɋւ��R�[�h���g�킸�A
-���E���̃V�X�e���Ɏ�����A�@���ł߂�ꂽ���C�u�������g�����Ƃ��I�X�X�����܂��B���̃R�[�h���g�p�������Ƃ��甭�������@���Ȃ�ӔC�͕������˂܂��B
-�\�߂������������B)
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/ECC_equation.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/ECC_equation-300x35.png" alt="ECC_equation" width="300" height="35" class="alignnone size-medium wp-image-2531" /></a>
 
+<strong>a</strong>と<strong>b</strong>を変えても、それで出来上がる曲線は必ず下記のことが言えます。
+<ul>
+	<li>曲線上に存在する2つの点を通過する直線は必ず3つ目の点を通過する。</li>
+	<li>曲線上に存在する1つの点を通過し、接線となる場合、その接線は必ず2つ目の点を通過する。</li>
+</ul>
+<strong><em>（上記の線は唯一【縦線】を除きます。）</em></strong>
 
+<h1>加算法</h1>
 
-�ȉ~�Ȑ��Ƃ͂ǂ������d�g�݁H
+この性質を活かして、擬似的な足し算を定義することができます。
+- 点Ａと点Ｂを足し合わせて出来る点はその2つの点をつなぐ直線が通過する3つ目の点の反転
 
-<img src="./loop_EC.png"> <img src="./secp256k1_ec.png">
+<table border="1" style="width:75%">
+  <tr>
+    <td><strong><em>A + B = C</em></strong></td>
+    <td><strong><em>A + A = 2A</em></strong></td> 
+  </tr>
+  <tr>
+    <td><a href="https://btcnews.jp/wp-content/uploads/2015/03/EC_Add_ex.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/EC_Add_ex.png" alt="EC_Add_ex" width="271" height="253" class="alignnone size-full wp-image-2528" /></a></td>
+    <td><a href="https://btcnews.jp/wp-content/uploads/2015/03/EC_Double_ex.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/EC_Double_ex.png" alt="EC_Double_ex" width="269" height="252" class="alignnone size-full wp-image-2530" /></a></td> 
+  </tr>
+</table>
 
-�ȉ~�Ȑ��Ƃ́A��L�̃C���[�W�̂悤�� (�K�������ȉ~�ł���K�v������) �O���t�ł��B
+これを計算するには上記の画像左と右では異なります。
 
-�K�����L�̂悤�ȃt�H�[�}�b�g�ɏ]���܂��B
+※<strong><em>P + Q = R</strong></em> の計算を <strong><em>(x<sub>p</sub>, y<sub>p</sub>) + (x<sub>q</sub>, y<sub>q</sub>) = (x<sub>r</sub>, y<sub>r</sub>)</strong></em> とそれぞれの点の座標で計算します。
+※ダブルの場合は <strong><em>P + P = R</strong></em>
 
-<img src="./ECC_equation.png">
+<table border="1" style="width:50%">
+  <tr>
+    <td><strong>足し算 (Point Addition)</strong></td>
+    <td><strong>ダブル計算 (Point Doubling)</strong></td> 
+  </tr>
+  <tr>
+    <td><a href="https://btcnews.jp/wp-content/uploads/2015/03/EC_Add_equation.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/EC_Add_equation.png" alt="EC_Add_equation" width="174" height="100" class="alignnone size-full wp-image-2527" /></a></td>
+    <td><a href="https://btcnews.jp/wp-content/uploads/2015/03/EC_Double_equation.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/EC_Double_equation.png" alt="EC_Double_equation" width="174" height="109" class="alignnone size-full wp-image-2529" /></a></td> 
+  </tr>
+</table>
 
-a��b��ς��Ă��A����ŏo���オ��Ȑ��͕K�����L�̂��Ƃ������܂��B
+大切なことは、通常の足し算と同じように
+<strong><em>A + (B + C) = (A + B) + C
+A + B = B + A</em></strong>
+上記の二つの常識が楕円曲線の擬似的な足し算でも通じます。
 
-�E�Ȑ���ɑ��݂���2�̓_��ʉ߂��钼���͕K��3�ڂ̓_��ʉ߂���B
-�E�Ȑ���ɑ��݂���1�̓_��ʉ߂��A�ڐ��ƂȂ�ꍇ�A���̐ڐ��͕K��2�ڂ̓_��ʉ߂���B
-�i��L�̐��͗B��y�c���z�������܂��B�j
+<h3>加算法　－　ソース</h3>
 
-���̐������������āA�[���I�ȑ����Z���`���邱�Ƃ��ł��܂��B
-- �_�`�Ɠ_�a�𑫂����킹�ďo����_�͂���2�̓_���Ȃ��������ʉ߂���3�ڂ̓_�̔��]
+これをパイソンで書くと下記のようになります。
 
-<img src="./EC_Add_ex.png"> <img src="./EC_Double_ex.png">
-
-������v�Z����ɂ͏�L�̉摜���ƉE�ł͈قȂ�܂��B
-
-��P + Q = R �̌v�Z�� (xp, yp) + (xq, yq) = (xr, yr) �Ƃ��ꂼ��̓_�̍��W�Ōv�Z���܂��B
-���_�u���̏ꍇ�� P + P = R
-
-�����Z (Point Addition) (��)   �_�u���v�Z (Point Doubling) (�E)
-<img src="./EC_Add_equation.png"> <img src="./EC_Double_equation.png">
-
-��؂Ȃ��Ƃ́A�ʏ�̑����Z�Ɠ����悤��
-A + (B + C) = (A + B) + C
-A + B = B + A
-
-��L�̓�̏펯���ȉ~�Ȑ��̋[���I�ȑ����Z�ł��ʂ��܂��B
-
-������p�C�\���ŏ����Ɖ��L�̂悤�ɂȂ�܂��B
-
-```
+[code language="python"]
 # SECP256k1 curve a and p value
 cA = 0
 cP = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 1
@@ -81,35 +95,45 @@ def EC_add(P, Q, Pcur = cP):
     return (x, y)
 
 def EC_double(P, Acur = cA, Pcur = cP):
-    Lam = ((3 * (P[0] ** 2) + Acur) * inv_mod(2 * P[1])) % Pcur
-    x = (Lam ** 2 - 2 * P[0]) % Pcur
-    y = (Lam * (P[0] - x) - P[1]) % Pcur
+    Lamda = ((3 * (P[0] ** 2) + Acur) * inv_mod(2 * P[1])) % Pcur
+    x = (Lamda ** 2 - 2 * P[0]) % Pcur
+    y = (Lamda * (P[0] - x) - P[1]) % Pcur
     return (x, y)
-```
+[/code]
 
-cP�ƂȂ��Ă�����̂͑傫��(256�r�b�g)�f���ł��B(�������ł́umod p�v��p�̕����ł��B)
-�����p���đȉ~�Ȑ������݂��镽�ʂ͈̔͂����肵�Ă��āA��̒[���z������A���������̒[�������߂��đ����܂��B�C���[�W�͉��L�̂悤�Ȃ��̂ł��B (p = 10 �̏ꍇ)
+<em>このコードを含め、このシリーズで使われる定数はすべてビットコインが使用する「SECP256k1」という曲線をベースに使っているので、
+念頭に入れていただければ幸いです。(他の曲線と他の定数は存在します。)</em>
 
-<img src="./secp256k1_EC_mod10.png">
+<strong>cP</strong>となっているものは大きな(<strong>256ビット</strong>)素数です。(方程式では「<strong>mod p</strong>」の<strong>p</strong>の部分です。)
+これを用いて楕円曲線が存在する平面の範囲を限定していて、一つの端を越えたら、向こう側の端が巻き戻って続きます。イメージは下記のようなものです。
+<strong><em>(p = 10 の場合)</strong></em>
 
-�����Z�p��p���āu����Z�v���s���ꍇ�A����Ɋg�����[�N���b�h�ݏ��@���g��Ȃ���΂����܂���̂ŁAinv_mod������Ă��܂��B
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/secp256k1_EC_mod10.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/secp256k1_EC_mod10-300x297.png" alt="secp256k1_EC_mod10" width="300" height="297" class="alignnone size-medium wp-image-2534" /></a>
 
-## 
+なお、合同算術を用いて「割り算」を行う場合、代わりに「拡張ユークリッド互除法」を使わなければいけませんので、<strong>inv_mod</strong>も入れています。
 
-P + P + P + P = 4P �̂悤��P�𕡐��񑫂����킹��Ƌ[���I�Ȋ|���Z���ł��܂��B
-����ɂ���āA���J���Í��ɉ��p�ł��镔���������Ă��܂��B
+<h1>乗法</h1>
 
-�����Z�͂ł��Ă��A�����Z���ł��܂���B�X�ɁA�����Z�p�ɂ���Č���ꂽ���ʂő傫�ȗ����Ɗ|���Z������ƁA
-�ŏI�I�ɂ��ǂ蒅�����_�����邾���ŉ��񑫂����킳�ꂽ��������܂���B
+<strong><em>P + P + P + P = 4P</em></strong> のように<strong><em>P</strong></em>を複数回足し合わせると擬似的な掛け算もできます。
+これによって、公開鍵暗号に応用できる部分が見えてきます。
 
-�悸�A���J���𐶐����邽�߂ɁA�N�_�ƂȂ�_���`���܂��B�����Generator Point��G�ŕ\���܂��B
+足し算はできても、引き算ができません。更に、合同算術によって限られた平面で大きな乱数と掛け算をすると、
+最終的にたどり着いた点を見るだけで何回足し合わされたか分かりません。
 
-����G�������ɉ��񑫂����킹�����̉񐔂̂��Ƃ�閧���Ƃ��A����ŏo�����_�̂��Ƃ����J���Ƃ��܂��B
+先ず、公開鍵を生成するために、起点となる点を定義します。これをGenerator Pointの<strong>G</strong>で表します。
 
-�ł́A�ȉ~�Ȑ��̊|���Z���p�C�\���ŏ����Ƃǂ��Ȃ邩�F
-(Double and Add��@���g���܂��B)�i��F22 x 10 �� 10110 (22��2�i�@) �� ((((((10 x 2) x 2) + 10) x 2) + 10) x 2)�j
+この<strong>G</strong>を自分に何回足し合わせたかの回数のことを秘密鍵とし、それで出来た点のことを公開鍵とします。
 
-```
+計算に<strong>Double and Add</strong>手法を使います。下記の方程式にある<strong>G</strong>を全て簡単な整数で置き換えてみてください。(例えば<strong>10</strong>)
+<center><strong>(例：22 x G ⇒ 10110 (22の2進法))</strong></center>
+
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/double_add.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/double_add.png" alt="double_add" width="557" height="95" class="aligncenter size-full wp-image-2543" /></a></center>
+
+では、楕円曲線の掛け算をパイソンで書くとどうなるか：
+
+<h3>乗法　－　ソース</h3>
+
+[code language="python"]
 cN = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 cB = 7
 
@@ -127,14 +151,20 @@ def EC_mult(Scalar, Point = Gpt):
         if ScalarB[i] == "1":
             Q = EC_add(Q, Point)
     return (Q)
-```
+[/code]
 
-���āA�����ɁA�L���Ȍ��y�A�ł�����Ă݂܂��傤�B
+<strong>cN</strong> というのは、合同算術で限られた平面に存在する整数で出来た点の総数です。
+それだけの点が存在するということは、掛け数としてそれを超えた数字を入れても重複が出てきます。
+よって、楕円曲線の計算をする場合、整数の計算は<strong>N</strong>で限り、平面の座標を指す場合は<strong>P</strong>で限ります。
 
-��L�̃X�N���v�g�����ׂĂ܂Ƃ߂āA�uecc.py�v�Ƃ��ĕۑ����܂��B
-�����p�X���Ńp�C�\���̃^�[�~�i�����J���ĉ��L�̃R�}���h�����s���܂��傤�B
+<h1>実践</h1>
 
-```
+さて、試しに、有名な鍵ペアでも作ってみましょう。
+
+上記のスクリプトをすべてまとめて、「<strong>ecc.py</strong>」として保存します。<em>(記事の最後にもまとめてあります。)</em>
+同じパス内でパイソンのターミナルを開いて下記のコマンドを実行しましょう。
+
+[code language="python"]
 >>> from ecc import EC_mult
 >>> from hashlib import sha256
 >>> hash = sha256("Satoshi Nakamoto").hexdigest()
@@ -144,14 +174,71 @@ def EC_mult(Scalar, Point = Gpt):
 >>> pt = EC_mult(scalar)
 >>> "04" + "%064x" % pt[0] + "%064x" % pt[1]
 '040791dc70b75aa995213244ad3f4886d74d61ccd3ef658243fcad14c9ccee2b0aa762fbc6ac0921b8f17025bb8458b92794ae87a133894d70d7995fc0b6b5ab90'
-```
+[/code]
 
-�����ł��IBrainwallet���r�b�g�R�C���̑n�ݎҁu���{�N�j�v�̂��̂��v�Z���܂����B
+そうです！<strong>Brainwallet</strong>がビットコインの創設者「<strong>中本哲史</strong>」のものを計算しました。
 
-���̌��J���̃n�b�V��������āA�r�b�g�R�C���A�h���X�ɂ���� 1JryTePceSiWVpoNBU8SbwiT7J4ghzijzW �ɂȂ�܂��B
+この公開鍵のハッシュを取って、ビットコインアドレスにすると <strong>1JryTePceSiWVpoNBU8SbwiT7J4ghzijzW</strong> になります。
+(秘密鍵が<strong>5K38ZKiJBMmsk9iLcaakHfMa6FoZpLKpmhyo9aZnjossPc49J7e</strong>)
+このアドレスはすごく有名なアドレスの一つです。ビットコインを送り込むとその内誰かに取られますので、ご注意を。
 
-�ł����A����͂���ŏI���ł��B
+<h1>第1回　おしまい</h1>
+では、今回はこれで終わりです。
 
-����ȍ~�͂���������Ǝ�Z�Ƀr�b�g�R�C���Ɋւ��֐��∵�������������L�����������Ǝv���Ă��܂��B
+<strong>ソースの結果はこちら：</strong>
+[code language="python" collapse="true"]
+# SECP256k1 curve p, n, a, b, and G values
+cP = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 1
+cN = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+cA = 0
+cB = 7
 
-������̋L���̓��e�Ə������\�[�X�𐏎�github�ɋ����Ă����܂��̂ŁA�F���������`�F�b�N���Ă݂ĉ������B
+Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+Gpt = (Gx, Gy)
+
+def inv_mod(a, p = cP):
+    lim, him = 1,0
+    low, high = a % p, p
+    while low > 1:
+        ratio = high/low
+        nm = him-lim*ratio
+        new = high-low*ratio
+        him = lim
+        high = low
+        lim = nm
+        low = new
+    return lim % p
+
+def EC_add(P, Q, Pcur = cP):
+    Lamda = ((Q[1] - P[1]) * inv_mod(Q[0] - P[0])) % Pcur
+    x = ((Lamda ** 2) - P[0] - Q[0]) % Pcur
+    y = (Lamda * (P[0] - x) - P[1]) % Pcur
+    return (x, y)
+
+def EC_double(P, Acur = cA, Pcur = cP):
+    Lamda = ((3 * (P[0] ** 2) + Acur) * inv_mod(2 * P[1])) % Pcur
+    x = (Lamda ** 2 - 2 * P[0]) % Pcur
+    y = (Lamda * (P[0] - x) - P[1]) % Pcur
+    return (x, y)
+
+def EC_mult(Scalar, Point = Gpt):
+    if Scalar == 0 or Scalar >= cN:
+        raise Exception("Invalid Scalar/Private Key")
+    ScalarB = str(bin(Scalar))[2:]
+    Q = Point
+    for i in range (1, len(ScalarB)):
+        Q = EC_double(Q)
+        if ScalarB[i] == "1":
+            Q = EC_add(Q, Point)
+    return (Q)
+[/code]
+
+次回以降はもうちょっと手短にビットコインに関わる関数や扱い方を説明する記事を書こうと思っています。
+今回少し長くなってしまい申し訳ございません。
+
+こちらの記事の内容と書いたソースを随時githubに挙げていきますので、皆さんも是非チェックしてみて下さい。
+<strong>Pull request</strong> や教えている内容に対する指摘は検討しますので、是非 <strong>issue</strong> か <strong>pull request</strong> を下さい。
+<a href="https://github.com/junderw/btcnews/tree/master/%E7%AC%AC1%E5%9B%9E" target="_blank">https://github.com/junderw/btcnews/tree/master/第1回</a>
+
+単なるディスカッションについては下記のコメント欄にてどうぞ宜しくお願いします。

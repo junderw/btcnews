@@ -1,4 +1,4 @@
-# SECP256k1 curve a and p value
+# SECP256k1 curve p, n, a, b, and G values
 cP = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 1
 cN = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 cA = 0
@@ -28,9 +28,9 @@ def EC_add(P, Q, Pcur = cP):
     return (x, y)
 
 def EC_double(P, Acur = cA, Pcur = cP):
-    Lam = ((3 * (P[0] ** 2) + Acur) * inv_mod(2 * P[1])) % Pcur
-    x = (Lam ** 2 - 2 * P[0]) % Pcur
-    y = (Lam * (P[0] - x) - P[1]) % Pcur
+    Lamda = ((3 * (P[0] ** 2) + Acur) * inv_mod(2 * P[1])) % Pcur
+    x = (Lamda ** 2 - 2 * P[0]) % Pcur
+    y = (Lamda * (P[0] - x) - P[1]) % Pcur
     return (x, y)
 
 def EC_mult(Scalar, Point = Gpt):
