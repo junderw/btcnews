@@ -1,0 +1,318 @@
+<a href="https://btcnews.jp/wp-content/uploads/2015/03/series_banner.png"><img src="https://btcnews.jp/wp-content/uploads/2015/03/series_banner.png" alt="series_banner" width="1000" height="434" class="aligncenter size-full wp-image-2572" /></a>
+<h1>今回のテーマ</h1>
+こんばんちは！ビットバンク社技術顧問のジョナサン・アンダーウッドです。
+
+今日のお話しは前回の楕円曲線の話の続き、実際に公開鍵と秘密鍵をビットコインのソフトで扱えるようにします。
+簡単に言うと、今日の話は主にエンコーディングの話になります。
+
+今日のファイルを「bitcoin.py」と名づけましょう。
+
+<h1>base58 (58進法)</h1>
+
+ビットコインのアドレスの特徴を思い浮かべてみて下さい。
+
+「1、若しくは3で始まって、大体34文字程度で～」程度で大体の人の理解が止まっちゃいます。
+特定の文字で始まったりしているのに訳があったんです。それがbase58というエンコード方式があるからです。
+
+先ずはコードを見ましょう。
+
+[code language="python"]
+__b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+__b58base = len(__b58chars)
+
+def b58encode(v):
+    long_value = 0L
+
+    for (i, c) in enumerate(v[::-1]):
+        long_value += (256**i) * ord(c)
+
+    result = ''
+    while long_value >= __b58base:
+        div, mod = divmod(long_value, __b58base)
+        result = __b58chars[mod] + result
+        long_value = div
+    result = __b58chars[long_value] + result
+
+    nPad = 0
+    for c in v:
+        if c == '\0': nPad += 1
+        else: break
+
+    return (__b58chars[0]*nPad) + result
+
+def b58decode(v):
+    long_value = 0L
+    for (i, c) in enumerate(v[::-1]):
+        long_value += __b58chars.find(c) * (__b58base**i)
+
+    result = ''
+    while long_value >= 256:
+        div, mod = divmod(long_value, 256)
+        result = chr(mod) + result
+        long_value = div
+    result = chr(long_value) + result
+
+    nPad = 0
+    for c in v:
+        if c == __b58chars[0]: nPad += 1
+        else: break
+
+    result = chr(0)*nPad + result
+
+    return result
+[/code]
+
+入力として、バイナリデータを入れて、そのバイナリデータを16進法から58進法に置き換えるという作業です。
+パイソンでは一つのバイト(パイソンはバイトの配列ではなく、バイナリデータを扱う時は文字列タイプで扱います)の値を10進法に変えたい時は ord() を使います。
+
+バイト列を逆から読んで、位の低いものから順番に long_value に足していきながら、16進法(文字列の一文字単位で見ると256進法ともとらえられます)のものを10進法の整数に変えます。
+
+base58では、見違いが起きやすい文字は除外されているため、数字の0も入っておらず、base58の0の値は「1」で表します。そこから順番に、進法の変換作業を行い、58で割りながら、剰余で文字を決め、付け足しながら、商を次のループに残します。
+
+バイトの配列の中で、頭の00バイトの数でハッシュの値が違ってきますので、進法の変換では頭の0は意味が無いのに、数を把握するために結果の頭に「1」を0バイトの数だけつけます。
+
+<h2>base58Check</h2>
+
+チェックサムを付けることによって、更にタイプミスなどの予防ができますので、チェックサムを付けてからbase58エンコードをすることをbase58Checkと呼びます。
+
+コードは下記の通りです。
+
+[code language="python"]
+import hashlib
+
+def EncodeBase58Check(vchIn):
+    hash = hashlib.sha256(hashlib.sha256(vchIn).digest()).digest()
+    return b58encode(vchIn + hash[0:4])
+
+def DecodeBase58Check(psz):
+    vchRet = b58decode(psz)
+    key = vchRet[0:-4]
+    csum = vchRet[-4:]
+    hash = hashlib.sha256(hashlib.sha256(key).digest()).digest()
+    cs32 = hash[0:4]
+    if cs32 != csum:
+        return None
+    else:
+        return key
+[/code]
+
+SHA256を2回行い、その結果の頭4バイトをデータの最後に付けてからbase58エンコードをするだけのことで非常に簡単です。
+
+<h1>楕円曲線の点から公開鍵へ、そしてアドレスへ</h1>
+
+先ずは、楕円曲線でできた点をバイト列にしよう。
+
+[code language="python"]
+import ecc
+
+def pointToPubkey(point, compressed = True):
+    x = ('%064x' % point[0]).decode('hex')
+    if compressed:
+        return ('%02x' % (2 + (point[1] & 1))).decode('hex') + x
+    else:
+        return chr(4) + x + ('%064x' % point[1]).decode('hex')
+
+def privkeyToPubkey(priv, compressed = True):
+    secret = int(priv.encode('hex'),16)
+    pub_point = ecc.EC_mult(secret)
+    return pointToPubkey(pub_point, compressed)
+[/code]
+
+pubkey (公開鍵の略称) には二つの形があります。compressedとuncompressed。
+
+圧縮とはいえ、あくまで Y の値の＋－の情報をヘッダのバイトに入れ込むかどうかだけです。
+非圧縮の公開鍵は65バイトなのに対して、圧縮公開鍵は33バイトです。
+
+非圧縮の公開鍵を使うメリットが全く無いので、実装する際は圧縮公開鍵を使いましょう。
+
+Y の値が奇数の場合、ヘッダバイトが"03"で、偶数の場合は"02"。非圧縮は"04"の後に X 32バイト Y 32バイト という流れです。
+
+そして、これを機に、ハッシュなどの出力を入力として受け入れる関数を作り、privkey ⇒ pubkeyを簡単に生成できるようになります。
+
+<h2>pubkeyからアドレスへ</h2>
+
+[code language="python"]
+def hash_160(public_key):
+    try:
+        md = hashlib.new('ripemd160')
+        md.update(hashlib.sha256(public_key).digest())
+        return md.digest()
+    except Exception:
+        import ripemd
+        md = ripemd.new(hashlib.sha256(public_key).digest())
+        return md.digest()
+[/code]
+
+ここで hashlib.new() を使うことで、システムに標準実装されているOpenSSLのハッシュライブラリからripemd160をインポートします。
+エラーが出た場合はパイソンネイティブのライブラリが無いかを見ます。
+
+pubkeyのバイト列をアドレスにするために、先ずはこの「hash160」というプロセス (SHA256 ⇒ RIPEMD160 のハッシュ連鎖) を通してから、
+その結果に適切なヘッダバイトを付けて、base58Checkエンコードすればいいんです。
+
+今回はビットコインの通常アドレスのみにしますが、通常のビットコインアドレスのヘッダバイトは"00"です。
+
+[code language="python"]
+def pubkeyToAddress(pubkey):
+    return EncodeBase58Check(chr(0) + hash_160(pubkey))
+[/code]
+
+合わせて、秘密鍵の生データを、ビットコインのウォレットソフトが扱うWIF形式に変えるための関数も書き加えます。
+
+[code language="python"]
+def privkeyToWIF(priv, compressed = True):
+    if len(priv) != 32: raise Exception('privkeyToWIF: Not a valid privkey')
+    v = chr(128) + priv
+    if compressed: v += chr(1)
+    return EncodeBase58Check(v)
+
+def wifToPrivkey(WIF):
+    decoded = DecodeBase58Check(WIF)
+    if decoded == None: raise Exception('wifToPrivkey: invalid WIF privkey')
+    if len(decoded) == 34: return decoded[1:-1], True
+    if len(decoded) == 33: return decoded[1:], False
+    raise Exception('wifToPrivkey: invalid WIF privkey')
+[/code]
+
+秘密鍵のヘッダバイトは、通常アドレスのヘッダバイト(0-127)に128を足すことで秘密鍵用のヘッダバイトになります。
+
+公開鍵の形式の指定もWIF秘密鍵の中に入れないと、どっちの公開鍵をハッシュにかければ良いか分からなくなるため、
+base58Checkに掛ける前に、最後に"01"バイトを一つ付け足します。これがあれば、compressed が Trueになりますので、Trueを返します。
+
+<h1>実際に使ってみよう</h1>
+
+パイソンのコマンドで下記を実行しましょう。
+
+[code language="python"]
+>>> from bitcoin import *
+>>> from hashlib import sha256
+>>> hash = sha256("Satoshi Nakamoto").digest()
+>>> hash.encode('hex')
+'a0dc65ffca799873cbea0ac274015b9526505daaaed385155425f7337704883e'
+>>> hash
+'\xa0\xdce\xff\xcay\x98s\xcb\xea\n\xc2t\x01[\x95&P]\xaa\xae\xd3\x85\x15T%\xf73w\x04\x88>'
+>>> privkeyToWIF(hash)
+'L2cQMfbGpih4yTTTa3Dx4YHo4CLXqvJ5rKsggs9iswuXQYECC8aK'
+>>> pubkeyToAddress(privkeyToPubkey(hash))
+'17ZYZASydeA1xyfNrcYcLyqghmK3eGJpHq'
+
+# 下記は非圧縮で生成してみます。別のアドレスと別のWIF秘密鍵になります。しかし、楕円曲線における秘密鍵と公開鍵は一緒。
+
+>>> privkeyToWIF(hash, False)
+'5K38ZKiJBMmsk9iLcaakHfMa6FoZpLKpmhyo9aZnjossPc49J7e'
+>>> pubkeyToAddress(privkeyToPubkey(hash, False))
+'1JryTePceSiWVpoNBU8SbwiT7J4ghzijzW'
+[/code]
+
+これで楕円曲線で計算したものを実際にビットコインのソフトが認識できるようになりました。
+
+<strong>ソースの結果はこちら</strong>
+[code language="python" collapse="true"]
+import hashlib
+import ecc
+
+__b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+__b58base = len(__b58chars)
+
+def b58encode(v):
+    long_value = 0L
+
+    for (i, c) in enumerate(v[::-1]):
+        long_value += (256**i) * ord(c)
+
+    result = ''
+    while long_value >= __b58base:
+        div, mod = divmod(long_value, __b58base)
+        result = __b58chars[mod] + result
+        long_value = div
+    result = __b58chars[long_value] + result
+
+    nPad = 0
+    for c in v:
+        if c == '\0': nPad += 1
+        else: break
+
+    return (__b58chars[0]*nPad) + result
+
+def b58decode(v):
+    long_value = 0L
+    for (i, c) in enumerate(v[::-1]):
+        long_value += __b58chars.find(c) * (__b58base**i)
+
+    result = ''
+    while long_value >= 256:
+        div, mod = divmod(long_value, 256)
+        result = chr(mod) + result
+        long_value = div
+    result = chr(long_value) + result
+
+    nPad = 0
+    for c in v:
+        if c == __b58chars[0]: nPad += 1
+        else: break
+
+    result = chr(0)*nPad + result
+
+    return result
+
+def EncodeBase58Check(vchIn):
+    hash = hashlib.sha256(hashlib.sha256(vchIn).digest()).digest()
+    return b58encode(vchIn + hash[0:4])
+
+def DecodeBase58Check(psz):
+    vchRet = b58decode(psz)
+    key = vchRet[0:-4]
+    csum = vchRet[-4:]
+    hash = hashlib.sha256(hashlib.sha256(key).digest()).digest()
+    cs32 = hash[0:4]
+    if cs32 != csum:
+        return None
+    else:
+        return key
+
+def pointToPubkey(point, compressed = True):
+    x = ('%064x' % point[0]).decode('hex')
+    if compressed:
+        return ('%02x' % (2 + (point[1] & 1))).decode('hex') + x
+    else:
+        return chr(4) + x + ('%064x' % point[1]).decode('hex')
+
+def hash_160(public_key):
+    try:
+        md = hashlib.new('ripemd160')
+        md.update(hashlib.sha256(public_key).digest())
+        return md.digest()
+    except Exception:
+        import ripemd
+        md = ripemd.new(hashlib.sha256(public_key).digest())
+        return md.digest()
+
+def pubkeyToAddress(pubkey):
+    return EncodeBase58Check(chr(0) + hash_160(pubkey))
+
+def privkeyToWIF(priv, compressed = True):
+    if len(priv) != 32: raise Exception('privkeyToWIF: Not a valid privkey')
+    v = chr(128) + priv
+    if compressed: v += chr(1)
+    return EncodeBase58Check(v)
+
+def wifToPrivkey(WIF):
+    decoded = DecodeBase58Check(WIF)
+    if decoded == None: raise Exception('wifToPrivkey: invalid WIF privkey')
+    if len(decoded) == 34: return decoded[1:-1], True
+    if len(decoded) == 33: return decoded[1:], False
+    raise Exception('wifToPrivkey: invalid WIF privkey')
+
+def privkeyToPubkey(priv, compressed = True):
+    secret = int(priv.encode('hex'),16)
+    pub_point = ecc.EC_mult(secret)
+    return pointToPubkey(pub_point, compressed)
+[/code]
+
+
+次回は取引の仕組みや、デジタル署名について話します。
+
+こちらの記事の内容と書いたソースを随時githubに挙げていきますので、皆さんも是非チェックしてみて下さい。
+<strong>Pull request</strong> や教えている内容に対する指摘は検討しますので、是非 <strong>issue</strong> か <strong>pull request</strong> を下さい。
+<a href="https://github.com/junderw/btcnews/tree/master/%E7%AC%AC2%E5%9B%9E" target="_blank">https://github.com/junderw/btcnews/tree/master/第2回</a>
+
+単なるディスカッションについては下記のコメント欄にてどうぞ宜しくお願いします。
