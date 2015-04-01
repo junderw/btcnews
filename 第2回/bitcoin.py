@@ -89,8 +89,8 @@ def privkeyToWIF(priv, compressed = True):
 def wifToPrivkey(WIF):
     decoded = DecodeBase58Check(WIF)
     if decoded == None: raise Exception('wifToPrivkey: invalid WIF privkey')
-    if len(decoded) == 34: return decoded[1:-1]
-    if len(decoded) == 33: return decoded[1:]
+    if len(decoded) == 34: return decoded[1:-1], True
+    if len(decoded) == 33: return decoded[1:], False
     raise Exception('wifToPrivkey: invalid WIF privkey')
 
 def privkeyToPubkey(priv, compressed = True):
